@@ -439,7 +439,12 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         document=InputFile(io.BytesIO(csv_bytes), filename=filename),
         caption="📎 Таблица всех ставок (открой в Excel или Numbers)",
     )
-
+async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    if update.message.photo:
+        file_id = update.message.photo[-1].file_id
+        await update.message.reply_text(f"`{file_id}`", parse_mode="Markdown")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -467,6 +472,7 @@ def main():
     app.add_handler(conv)
 
     app.add_handler(CommandHandler("admin", admin_cmd))
+    app.add_handler(MessageHandler(filters.PHOTO, getid))
     app.add_handler(CallbackQueryHandler(on_button))
 
     logger.info("Бот запущен. Ctrl+C — остановить.")
