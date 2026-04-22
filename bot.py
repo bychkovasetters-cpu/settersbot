@@ -14,6 +14,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputFile,
+    InputMediaPhoto,
 )
 from telegram.ext import (
     Application,
@@ -60,6 +61,14 @@ BET_TYPES = [
 ]
 
 STAKE_AMOUNTS = [5, 10, 20]
+
+# Файлы с картинками команд — порядок строго соответствует списку TEAMS
+TEAM_IMAGES = [
+    "team1.png",  # Команда Кати Матвеевой
+    "team2.png",  # Команда Ярослава Колесникова
+    "team3.png",  # Команда Вероники Долгих
+    "team4.png",  # Команда Насти Курбанаевой
+]
 
 END_MESSAGE = "🏁 До встречи на Весёлых стартах 25 апреля!"
 
@@ -279,11 +288,30 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_teams_menu(update: Update, balance: int):
-    text = f"💰 Твой баланс: {balance} SETTERS Coins\n\nВыбери команду:"
+    """Показывает альбом из 4 картинок команд + текст с кнопками выбора."""
+    # Определяем, куда слать сообщения (chat_id и bot объект)
     if update.message:
-        await update.message.reply_text(text, reply_markup=teams_keyboard())
+        chat_id = update.message.chat_id
+        bot = update.message.get_bot()
     else:
-        await update.callback_query.message.reply_text(text, reply_markup=teams_keyboard())
+        chat_id = update.callback_query.message.chat_id
+        bot = update.callback_query.message.get_bot()
+
+    # Пытаемся собрать альбом из 4 картинок
+    media = []
+    for idx, img_path in enumerate(TEAM_IMAGES):
+        if os.path.exists(img_path):
+            # Подпись добавляем только к первой картинке — она отображается под альбомом
+            caption = TEAMS[idx] if idx == 0 else None
+            media.append(InputMediaPhoto(media=open(img_path, "rb"), caption=caption))
+
+    # Если удалось собрать хотя бы 2 картинки — отправляем альбомом (так красивее)
+    if len(media) >= 2:
+        await bot.send_media_group(chat_id=chat_id, media=media)
+
+    # После альбома — текст с кнопками команд
+    text = f"💰 Твой баланс: {balance} SETTERS Coins\n\nВыбери команду:"
+    await bot.send_message(chat_id=chat_id, text=text, reply_markup=teams_keyboard())
 
 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -373,10 +401,13 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Назад к списку команд
     elif data == "back_to_teams":
-        await query.edit_message_text(
-            f"💰 Твой баланс: {balance} SETTERS Coins\n\nВыбери команду:",
-            reply_markup=teams_keyboard(),
-        )
+        # Скрываем кнопки у предыдущего сообщения, чтобы оно не висело активным
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        # И показываем свежее меню с альбомом команд
+        await show_teams_menu(update, balance=balance)
 
 
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
