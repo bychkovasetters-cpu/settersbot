@@ -27,13 +27,10 @@ from telegram.ext import (
 )
 
 # ============ НАСТРОЙКИ ============
-# Сначала пробуем прочитать из переменных окружения (так делает Railway),
-# если их нет — берём значения из кода (для локального запуска).
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН_ОТ_BOTFATHER")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "123456789"))
 
 START_BALANCE = 20
-# На Railway можно подключить volume и указать путь, например "/data/bot_data.db"
 DB_FILE = os.environ.get("DB_FILE", "bot_data.db")
 # ===================================
 
@@ -43,7 +40,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Одно состояние диалога: ждём «Имя Фамилия» одним сообщением
 WAITING_NAME = 1
 
 TEAMS = [
@@ -62,12 +58,14 @@ BET_TYPES = [
 
 STAKE_AMOUNTS = [5, 10, 20]
 
-# Файлы с картинками команд — порядок строго соответствует списку TEAMS
+# Картинки команд загружаются напрямую с GitHub
+GITHUB_RAW = "https://raw.githubusercontent.com/bychkovasetters-cpu/settersbot/main/"
+
 TEAM_IMAGES = [
-    "team1.jpg",  # Команда Кати Матвеевой
-    "team2.jpg",  # Команда Ярослава Колесникова
-    "team3.jpg",  # Команда Вероники Долгих
-    "team4.jpg",  # Команда Насти Курбанаевой
+    GITHUB_RAW + "team1.jpg",
+    GITHUB_RAW + "team2.jpg",
+    GITHUB_RAW + "team3.jpg",
+    GITHUB_RAW + "team4.jpg",
 ]
 
 END_MESSAGE = "🏁 До встречи на Весёлых стартах 25 апреля!"
@@ -76,7 +74,6 @@ END_MESSAGE = "🏁 До встречи на Весёлых стартах 25 а
 # ============ БАЗА ДАННЫХ ============
 
 def init_db():
-    """Создаёт таблицы, если их ещё нет."""
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute("""
@@ -87,7 +84,6 @@ def init_db():
             balance    INTEGER
         )
     """)
-    # UNIQUE не даст одному юзеру поставить дважды на ту же комбинацию
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bets (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -229,21 +225,17 @@ def back_keyboard():
 # ============ ХЭНДЛЕРЫ ============
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start."""
     user = get_user(update.effective_user.id)
     if user is None:
-        # Новый пользователь — показываем приветствие и кнопку «Начать»
         await update.message.reply_text(
             "Привет! Это агрегатор ставок на Весёлые старты ((SETTERS)). Готов начать?",
             reply_markup=welcome_keyboard(),
         )
     else:
-        # Уже зарегистрирован — сразу показываем команды
         await show_teams_menu(update, balance=user[3])
 
 
 async def begin_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Нажата кнопка «Начать» — просим имя и фамилию одним сообщением."""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
@@ -254,7 +246,6 @@ async def begin_registration(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получаем «Имя Фамилия» и регистрируем пользователя."""
     text = update.message.text.strip()
     parts = text.split(maxsplit=1)
     if len(parts) < 2 or not parts[0] or not parts[1]:
@@ -288,8 +279,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_teams_menu(update: Update, balance: int):
-    """Показывает альбом из 4 картинок команд + текст с кнопками выбора."""
-    # Определяем, куда слать сообщения (chat_id и bot объект)
+    """Отправляет альбом из 4 картинок команд + кнопки выбора."""
     if update.message:
         chat_id = update.message.chat_id
         bot = update.message.get_bot()
@@ -297,28 +287,21 @@ async def show_teams_menu(update: Update, balance: int):
         chat_id = update.callback_query.message.chat_id
         bot = update.callback_query.message.get_bot()
 
-    # Пытаемся отправить альбом, но если не получится — не падаем, просто пропускаем
+    # Загружаем картинки по URL с GitHub
     try:
-        media = []
-        for idx, img_path in enumerate(TEAM_IMAGES):
-            if os.path.exists(img_path):
-                caption = TEAMS[idx] if idx == 0 else None
-                media.append(InputMediaPhoto(media=open(img_path, "rb"), caption=caption))
-
-        if len(media) >= 2:
-            await bot.send_media_group(chat_id=chat_id, media=media)
+        media = [
+            InputMediaPhoto(media=url, caption=(TEAMS[i] if i == 0 else None))
+            for i, url in enumerate(TEAM_IMAGES)
+        ]
+        await bot.send_media_group(chat_id=chat_id, media=media)
     except Exception as e:
-        # Если альбом не отправился (большие файлы, проблема с форматом и т.д.) —
-        # просто логируем и идём дальше, чтобы пользователь всё равно увидел кнопки
-        logger.warning(f"Не удалось отправить альбом с командами: {e}")
+        logger.warning(f"Не удалось отправить альбом: {e}")
 
-    # После альбома (или вместо него) — текст с кнопками команд
     text = f"💰 Твой баланс: {balance} SETTERS Coins\n\nВыбери команду:"
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=teams_keyboard())
 
 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка кнопок (кроме «Начать» — её ловит ConversationHandler)."""
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -331,7 +314,6 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     balance = user[3]
 
-    # Выбрана команда → показываем типы ставок
     if data.startswith("team:"):
         team_idx = int(data.split(":")[1])
         await query.edit_message_text(
@@ -341,7 +323,6 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=bet_types_keyboard(team_idx),
         )
 
-    # Выбран тип ставки → показываем суммы
     elif data.startswith("bettype:"):
         _, t_idx, b_idx = data.split(":")
         team_idx, bet_type_idx = int(t_idx), int(b_idx)
@@ -358,7 +339,6 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=amounts_keyboard(team_idx, bet_type_idx),
         )
 
-    # Выбрана сумма → делаем ставку
     elif data.startswith("amount:"):
         _, t_idx, b_idx, amt = data.split(":")
         team_idx, bet_type_idx, amount = int(t_idx), int(b_idx), int(amt)
@@ -396,25 +376,20 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if new_balance == 0:
-            # Баланс закончился — финальное сообщение
             confirm_text += f"\n\n{END_MESSAGE}"
             await query.edit_message_text(confirm_text)
         else:
             await query.edit_message_text(confirm_text, reply_markup=back_keyboard())
 
-    # Назад к списку команд
     elif data == "back_to_teams":
-        # Скрываем кнопки у предыдущего сообщения, чтобы оно не висело активным
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
             pass
-        # И показываем свежее меню с альбомом команд
         await show_teams_menu(update, balance=balance)
 
 
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/admin — текстовая сводка + CSV-файл со всеми ставками."""
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("⛔ Команда доступна только администратору.")
         return
@@ -424,7 +399,6 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Пока никто не зарегистрировался.")
         return
 
-    # Текстовая сводка
     lines = ["📊 СПИСОК УЧАСТНИКОВ И СТАВОК"]
     total_bets = 0
     for item in data:
@@ -445,7 +419,6 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i in range(0, len(full), 4000):
         await update.message.reply_text(full[i:i + 4000])
 
-    # CSV-файл (открывается в Excel/Numbers)
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
     writer.writerow(["Имя", "Фамилия", "Telegram ID", "Баланс",
@@ -460,7 +433,6 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 writer.writerow([fn, ln, uid, bal,
                                  TEAMS[t_idx], BET_TYPES[bt_idx], amt, ts])
 
-    # utf-8-sig — чтобы Excel на Mac корректно открыл кириллицу
     csv_bytes = output.getvalue().encode("utf-8-sig")
     filename = f"bets_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
     await update.message.reply_document(
@@ -483,10 +455,8 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # /start вне диалога — просто показывает приветствие или меню
     app.add_handler(CommandHandler("start", start))
 
-    # Диалог регистрации: запускается нажатием кнопки «Начать»
     conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(begin_registration, pattern="^begin$")],
         states={
@@ -497,7 +467,6 @@ def main():
     app.add_handler(conv)
 
     app.add_handler(CommandHandler("admin", admin_cmd))
-    # Все остальные кнопки (кроме «Начать», которую забрал ConversationHandler)
     app.add_handler(CallbackQueryHandler(on_button))
 
     logger.info("Бот запущен. Ctrl+C — остановить.")
