@@ -58,14 +58,12 @@ BET_TYPES = [
 
 STAKE_AMOUNTS = [5, 10, 20]
 
-# Картинки команд загружаются напрямую с GitHub
-GITHUB_RAW = "https://raw.githubusercontent.com/bychkovasetters-cpu/settersbot/main/"
-
+# file_id картинок команд (загружены напрямую через Telegram)
 TEAM_IMAGES = [
-    GITHUB_RAW + "team1.jpg",
-    GITHUB_RAW + "team2.jpg",
-    GITHUB_RAW + "team3.jpg",
-    GITHUB_RAW + "team4.jpg",
+    "AgACAgIAAxkBAANkaei65UtaKoQim55fVLIu93oB3qEAAnAWaxtQJElLlNwJnddReK4BAAMCAAN5AAM7BA",
+    "AgACAgIAAxkBAANmaei6_2bji2zJA9PF1O78uulQwfAAAnEWaxtQJElLAxWeidHRBiYBAAMCAAN5AAM7BA",
+    "AgACAgIAAxkBAANoaei7B57aGwG43I2NBgnJ7Hifx8EAAnMWaxtQJElLE3x2rNzLx5IBAAMCAAN5AAM7BA",
+    "AgACAgIAAxkBAANqaei7FVrQ9JS3jofNLN-enNeYt5AAAnQWaxtQJElLF0AJ4iaM3mYBAAMCAAN5AAM7BA",
 ]
 
 END_MESSAGE = "🏁 До встречи на Весёлых стартах 25 апреля!"
@@ -287,11 +285,11 @@ async def show_teams_menu(update: Update, balance: int):
         chat_id = update.callback_query.message.chat_id
         bot = update.callback_query.message.get_bot()
 
-    # Загружаем картинки по URL с GitHub
+    # Отправляем альбом из 4 картинок через file_id
     try:
         media = [
-            InputMediaPhoto(media=url, caption=(TEAMS[i] if i == 0 else None))
-            for i, url in enumerate(TEAM_IMAGES)
+            InputMediaPhoto(media=file_id, caption=(TEAMS[i] if i == 0 else None))
+            for i, file_id in enumerate(TEAM_IMAGES)
         ]
         await bot.send_media_group(chat_id=chat_id, media=media)
     except Exception as e:
@@ -439,12 +437,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         document=InputFile(io.BytesIO(csv_bytes), filename=filename),
         caption="📎 Таблица всех ставок (открой в Excel или Numbers)",
     )
-async def getid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-    if update.message.photo:
-        file_id = update.message.photo[-1].file_id
-        await update.message.reply_text(f"`{file_id}`", parse_mode="Markdown")
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -472,7 +465,6 @@ def main():
     app.add_handler(conv)
 
     app.add_handler(CommandHandler("admin", admin_cmd))
-    app.add_handler(MessageHandler(filters.PHOTO, getid))
     app.add_handler(CallbackQueryHandler(on_button))
 
     logger.info("Бот запущен. Ctrl+C — остановить.")
