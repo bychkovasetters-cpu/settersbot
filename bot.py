@@ -258,26 +258,13 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"🎉 Регистрация завершена, {first_name}!\n"
-        f"Тебе начислено {START_BALANCE} SETTERS Coins.\n\n"
-        f"Коротко о механике:\n"
-        f"Весёлые старты – это легендарное соревнование спортсменов, "
-        f"которое будет состоять из 10 этапов.\n"
-        f"Предлагаем подогреть азарт и проверить свою интуицию!\n\n"
-        f"У тебя есть только 20 ((SETTERS)COINS). "
-        f"Распределяй их по 5, 10 или ставь сразу все 20 на одно событие.\n\n"
-        f"Какие есть ставки:\n"
-        f"– Команда получит титул Чемпиона и I место\n"
-        f"– Команда одержит победу в 5/10 испытаниях\n"
-        f"– Капитан команды победит в конкурсе капитанов\n"
-        f"– Команда не допустит ни одного проигрыша в 10/10 испытаниях\n\n"
-        f"Выбирай команду для ставки:"
+        f"Тебе начислено {START_BALANCE} SETTERS Coins."
     )
     await show_teams_menu(update, balance=START_BALANCE)
     return ConversationHandler.END
 
 
 async def show_teams_menu(update: Update, balance: int):
-    """Отправляет альбом из 4 картинок команд + кнопки выбора."""
     if update.message:
         chat_id = update.message.chat_id
         bot = update.message.get_bot()
@@ -285,16 +272,33 @@ async def show_teams_menu(update: Update, balance: int):
         chat_id = update.callback_query.message.chat_id
         bot = update.callback_query.message.get_bot()
 
-    # Отправляем альбом из 4 картинок через file_id
+    # 1. Правила
+    rules_text = (
+        "📖 Коротко о механике:\n\n"
+        "Весёлые старты – это легендарное соревнование спортсменов, "
+        "которое будет состоять из 10 этапов.\n"
+        "Предлагаем подогреть азарт и проверить свою интуицию!\n\n"
+        "У тебя есть только 20 SETTERS COINS. "
+        "Распределяй их по 5, 10 или ставь сразу все 20 на одно событие.\n\n"
+        "Какие есть ставки:\n"
+        "– Команда получит титул Чемпиона и I место\n"
+        "– Команда одержит победу в 5/10 испытаниях\n"
+        "– Капитан команды победит в конкурсе капитанов\n"
+        "– Команда не допустит ни одного проигрыша в 10/10 испытаниях"
+    )
+    await bot.send_message(chat_id=chat_id, text=rules_text)
+
+    # 2. Альбом из 4 фото с подписью "А вот и команды!"
     try:
         media = [
-            InputMediaPhoto(media=file_id, caption=(TEAMS[i] if i == 0 else None))
+            InputMediaPhoto(media=file_id, caption=("А вот и команды!" if i == 0 else None))
             for i, file_id in enumerate(TEAM_IMAGES)
         ]
         await bot.send_media_group(chat_id=chat_id, media=media)
     except Exception as e:
         logger.warning(f"Не удалось отправить альбом: {e}")
 
+    # 3. Баланс и кнопки выбора команды
     text = f"💰 Твой баланс: {balance} SETTERS Coins\n\nВыбери команду:"
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=teams_keyboard())
 
