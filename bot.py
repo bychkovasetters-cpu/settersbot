@@ -64,10 +64,10 @@ STAKE_AMOUNTS = [5, 10, 20]
 
 # Файлы с картинками команд — порядок строго соответствует списку TEAMS
 TEAM_IMAGES = [
-    "team1.png",  # Команда Кати Матвеевой
-    "team2.png",  # Команда Ярослава Колесникова
-    "team3.png",  # Команда Вероники Долгих
-    "team4.png",  # Команда Насти Курбанаевой
+    "team1.jpg",  # Команда Кати Матвеевой
+    "team2.jpg",  # Команда Ярослава Колесникова
+    "team3.jpg",  # Команда Вероники Долгих
+    "team4.jpg",  # Команда Насти Курбанаевой
 ]
 
 END_MESSAGE = "🏁 До встречи на Весёлых стартах 25 апреля!"
@@ -297,19 +297,22 @@ async def show_teams_menu(update: Update, balance: int):
         chat_id = update.callback_query.message.chat_id
         bot = update.callback_query.message.get_bot()
 
-    # Пытаемся собрать альбом из 4 картинок
-    media = []
-    for idx, img_path in enumerate(TEAM_IMAGES):
-        if os.path.exists(img_path):
-            # Подпись добавляем только к первой картинке — она отображается под альбомом
-            caption = TEAMS[idx] if idx == 0 else None
-            media.append(InputMediaPhoto(media=open(img_path, "rb"), caption=caption))
+    # Пытаемся отправить альбом, но если не получится — не падаем, просто пропускаем
+    try:
+        media = []
+        for idx, img_path in enumerate(TEAM_IMAGES):
+            if os.path.exists(img_path):
+                caption = TEAMS[idx] if idx == 0 else None
+                media.append(InputMediaPhoto(media=open(img_path, "rb"), caption=caption))
 
-    # Если удалось собрать хотя бы 2 картинки — отправляем альбомом (так красивее)
-    if len(media) >= 2:
-        await bot.send_media_group(chat_id=chat_id, media=media)
+        if len(media) >= 2:
+            await bot.send_media_group(chat_id=chat_id, media=media)
+    except Exception as e:
+        # Если альбом не отправился (большие файлы, проблема с форматом и т.д.) —
+        # просто логируем и идём дальше, чтобы пользователь всё равно увидел кнопки
+        logger.warning(f"Не удалось отправить альбом с командами: {e}")
 
-    # После альбома — текст с кнопками команд
+    # После альбома (или вместо него) — текст с кнопками команд
     text = f"💰 Твой баланс: {balance} SETTERS Coins\n\nВыбери команду:"
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=teams_keyboard())
 
